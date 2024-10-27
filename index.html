@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Responsive Route Map with Medium Yellow Outlined Text Labels for Bus Stops</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        /* CSS to apply a black outline to labels */
+        .outlined-label {
+            text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .outlined-label {
+                font-size: 14px; /* Smaller font for mobile */
+            }
+        }
+
+        @media (min-width: 601px) {
+            .outlined-label {
+                font-size: 18px; /* Larger font for tablets and desktops */
+            }
+        }
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD-5khxlqX7n6571Q5ug0Ad43kkLTARVmo"></script>
+    <script>
+        let map, directionsService, directionsRenderer, userMarker, routePolyline, routePath = [];
+        let busTrackerMarker, busPositionIndex = 0; // New variables
+        const busStops = [
+            { name: "SC Railway Station", lat: 17.4360347, lng: 78.5000057 },
+            { name: "Paradise", lat: 17.4432279, lng: 78.4886486 },
+            { name: "TADBund", lat: 17.4563979, lng: 78.4841730 },
+            { name: "Bowenpally Police Station", lat: 17.4759244, lng: 78.4737553 },
+            { name: "Dairy Farm", lat: 17.4876380, lng: 78.4733690 },
+            { name: "Suchitra Circle", lat: 17.4997636, lng: 78.4769753 },
+            { name: "Cine-Planet Kompally", lat: 17.5294985, lng: 78.4866795 },
+            { name: "Dhulapally X Road", lat: 17.5411156, lng: 78.4910153 },
+            { name: "Gunda Pochampally", lat: 17.5691192, lng: 78.4936861 },
+            { name: "Kandlakoya", lat: 17.5917113, lng: 78.4929072 },
+            { name: "CMR College", lat: 17.6041758, lng: 78.4907893 },
+            { name: "Medchal Checkpost", lat: 17.6174798, lng: 78.4856898 },
+            { name: "Medchal Bus Stop", lat: 17.6343223, lng: 78.4854413 }
+        ];
+
+        function initMap() {
+            const mapOptions = {
+                zoom: 12,
+                center: { lat: 17.5036519, lng: 78.4783938 },
+                styles: [
+                    { "elementType": "geometry", "stylers": [{"color": "#f5f5f5"}] },
+                    { "elementType": "labels.text.fill", "stylers": [{"color": "#616161"}] },
+                    { "elementType": "labels.text.stroke", "stylers": [{"color": "#f5f5f5"}] },
+                    { "featureType": "road", "elementType": "geometry", "stylers": [{"color": "#ffffff"}] },
+                    { "featureType": "road.highway", "elementType": "geometry", "stylers": [{"color": "#dadada"}] },
+                    { "featureType": "water", "elementType": "geometry", "stylers": [{"color": "#c9c9c9"}] }
+                ]
+            };
+
+            map = new google.maps.Map(document.getElementById('map'), mapOptions);
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer({ suppressMarkers: true });
+            directionsRenderer.setMap(map);
+
+            const start = new google.maps.LatLng(17.4367071, 78.4998864);
+            const end = new google.maps.LatLng(17.6341884, 78.4850725);
+            const waypoints = [
+                { location: new google.maps.LatLng(17.4421391, 78.4985479), stopover: false },
+                { location: new google.maps.LatLng(17.5036519, 78.4783938), stopover: false },
+                { location: new google.maps.LatLng(17.5797829, 78.4908721), stopover: false }
+            ];
+
+            const request = {
+                origin: start,
+                destination: end,
+                waypoints: waypoints,
+                travelMode: google.maps.TravelMode.DRIVING
+            };
+
+            directionsService.route(request, function(result, status) {
+                if (status == google.maps.DirectionsStatus.OK) {
+                    directionsRenderer.setDirections(result);
+                    routePath = result.routes[0].overview_path;
+                    routePolyline = new google.maps.Polyline({
+                        path: routePath,
+                        strokeColor: '#0000FF',
+                        strokeOpacity: 1.0,
+                        strokeWeight: 4,
+                        map: map
+                    });
+                }
+            });
+
+            addBusStopLabels();
+            setupBusTracker(); // Call function to set up bus tracking
+
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(updateUserLocation, handleError);
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+
+            // Set an interval to zoom to the bus marker's location every 10 seconds
+            setInterval(() => {
+                if (busTrackerMarker) {
+                    const busPosition = busTrackerMarker.getPosition();
+                    map.panTo(busPosition);
+                    map.setZoom(15); // Adjust zoom level as needed
+                }
+            }, 10000); // 10 seconds
+        }
+
+        function addBusStopLabels() {
+            const baseOffset = 0.0004;
+            busStops.forEach((stop, index) => {
+                const offsetLat = baseOffset * ((index % 2 === 0) ? 1 : -1);
+                const offsetLng = baseOffset * ((index % 3 === 0) ? -0.5 : 0.5);
+
+                const position = {
+                    lat: stop.lat + offsetLat,
+                    lng: stop.lng + offsetLng
+                };
+
+                new google.maps.Marker({
+                    position: position,
+                    map: map,
+                    label: {
+                        text: stop.name,
+                        color: "#FFD700", // Medium yellow text
+                        fontWeight: "bold",
+                        fontSize: "16px", // Adjust font size for better readability
+                        fontFamily: "Arial",
+                        className: "outlined-label" // CSS for outline effect
+                    },
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 0
+                    }
+                });
+            });
+        }
+
+        function updateUserLocation(position) {
+            const userLatLng = { lat: position.coords.latitude, lng: position.coords.longitude };
+            if (!userMarker) {
+                userMarker = new google.maps.Marker({
+                    position: userLatLng,
+                    map: map,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: '#FF0000',
+                        fillOpacity: 1,
+                        strokeWeight: 2,
+                        strokeColor: '#FFFFFF'
+                    }
+                });
+            } else {
+                userMarker.setPosition(userLatLng);
+            }
+
+            map.panTo(userLatLng);
+            checkProximityToBusStops(userLatLng); // Check the user's proximity to the bus stops
+        }
+
+        function handleError(error) {
+            console.error(error);
+            alert("Unable to retrieve location.");
+        }
+
+        // Function to set up the bus tracker
+        function setupBusTracker() {
+            busTrackerMarker = new google.maps.Marker({
+                position: busStops[busPositionIndex], // Start at the first bus stop
+                map: map,
+                icon: {
+                    url: 'https://i.postimg.cc/7YWB2mbr/bus.png', // Replace with your bus image URL
+                    scaledSize: new google.maps.Size(32, 32) // Adjust size as needed
+                }
+            });
+
+            // Set an interval to update the bus position
+            setInterval(updateBusTracker, 5000); // Update every 5 seconds
+        }
+
+        // Function to update the bus tracker position and manage route fading
+        function updateBusTracker() {
+            if (busPositionIndex < busStops.length) {
+                busTrackerMarker.setPosition(busStops[busPositionIndex]);
+                busPositionIndex++;
+
+                // Adjust visibility or fade out the bus marker after passing stops
+                setTimeout(() => {
+                    busTrackerMarker.setOpacity(0.5); // Example: reduce opacity after passing a stop
+                }, 5000); // Adjust timing as needed
+            } else {
+                busPositionIndex = 0; // Reset or stop the tracker as per requirement
+            }
+        }
+
+        // Function to check proximity to bus stops and redirect if the user is too far away
+        function checkProximityToBusStops(userLatLng) {
+            const maxDistance = 500; // 500 meters
+            let userIsNearStop = false;
+
+            busStops.forEach((stop) => {
+                const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                    new google.maps.LatLng(stop.lat, stop.lng),
+                    new google.maps.LatLng(userLatLng.lat, userLatLng.lng)
+                );
+
+                if (distance <= maxDistance) {
+                    userIsNearStop = true;
+                }
+            });
+
+            if (!userIsNearStop) {
+                window.location.href = "https://snazzy-haupia-d47a4b.netlify.app/";
+            }
+        }
+
+        google.maps.event.addDomListener(window, "load", initMap);
+    </script>
+</head>
+<body>
+    <div id="map"></div>
+</body>
+</html>
